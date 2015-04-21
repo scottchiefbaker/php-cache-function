@@ -15,14 +15,14 @@ define('CACHE_NAMESPACE', 'my-cache-namespace');
 define('CACHE_FOLDER', '/tmp/cache/');
 
 // memcache server hostname
-define('CACHE_MEMCACHED_HOST', 'localhost');
+define('CACHE_MEMCACHE_HOST', 'localhost');
 
 // memcache server port
-define('CACHE_MEMCACHED_PORT', '11211');
+define('CACHE_MEMCACHE_PORT', '11211');
 
 // Disable attempting to use a type of cache if you need to
 // Otherwise we'll try and be smart and pick for you
-define('USE_MEMCACHE',true);
+define('USE_MEMCACHE',false);
 define('USE_FILECACHE',true);
 
 /**
@@ -34,25 +34,28 @@ define('USE_FILECACHE',true);
  * @param string $expires - the expiry time of the data
  * @return mixed - the cached data to return
  **/
-function cache($key, $value = null, $expires = '+1 year')
+function cache($key, $value = "", $expires = '+1 year')
 {
     // static variables allowing the function to run faster when called multiple times
-    static $cache_id, $memcached;
+    static $cache_id, $memcache;
+
+    $debug = 1;
 
     // get the cache_id used for easy cache clearing
-    if ($key != 'cache_id') {
-        if (!$cache_id) {
-            $cache_id = cache('cache_id', null);
-        }
-        if (!$cache_id) {
-            $cache_id = md5(microtime());
-            cache('cache_id', $cache_id);
-        }
-        $file = CACHE_NAMESPACE . '.' . $cache_id . '.' . $key;
-    }
-    else {
-        $file = CACHE_NAMESPACE . '.' . $key;
-    }
+    //if ($key != 'cache_id') {
+    //    // If there is no static cache_id, generate a new one and store it
+    //    if (!$cache_id) {
+    //        cache('cache_id', null);
+
+    //        $cache_id = md5(microtime(1));
+    //        cache('cache_id', $cache_id);
+    //    }
+    //    $file = CACHE_NAMESPACE . '.' . $cache_id . '.' . $key;
+    //} else {
+    //    $file = CACHE_NAMESPACE . '.' . $key;
+    //}
+
+    $file = CACHE_NAMESPACE . '.' . $key;
 
     // set the expire time
     $now = time();
@@ -61,63 +64,97 @@ function cache($key, $value = null, $expires = '+1 year')
     }
 
     // attempt connection to memcache
-    if (USE_MEMCACHE && $memcached === null) {
+    if (USE_MEMCACHE && $memcache === null) {
         if (class_exists('Memcached')) {
-            if (!$memcached) {
-                $memcached = new Memcached;
-                @$memcached->addServer(CACHE_MEMCACHED_HOST, CACHE_MEMCACHED_PORT) or ($memcached = false);
+            if (!$memcache) {
+                $memcache = new Memcached;
+                $memcache->addServer(CACHE_MEMCACHE_HOST,CACHE_MEMCACHE_PORT);
             }
         }
     }
 
     // handle cache using memcache
-    if (USE_MEMCACHE && $memcached) {
+    if (USE_MEMCACHE && $memcache) {
         // read cache
-        if ($value === null) {
-            $time = $memcached->get($file . '.time');
-            if (!$expires || $time <= $now) {
-                $memcached->delete($file . '.time');
-                $memcached->delete($file . '.data');
+        if ($value === "") {
+            if ($debug) {
+                print "Memcache: Read ($key)<br />";
             }
-            else {
-                $value = $memcached->get($file . '.data');
-                if ($value === false) $value = null;
+            $value = $memcache->get($file);
+        // delete the cache
+        } else if ($value === null) {
+            if ($debug) {
+                print "Memcache: Delete ($key)<br />";
             }
-        }
+            $value = $memcache->delete($file);
         // write cache
-        else {
-            $memcached->set($file . '.data', $value);
-            $memcached->set($file . '.time', $expires);
+        } elseif (isset($value)) {
+            if ($debug) {
+                print "Memcache: Set ($key / $value / $expires)<br />";
+            }
+            $value = $memcache->set($file, $value, $expires);
+        // You should never get here
+        } else {
+            print "Error with cache(); (#19419)";
+            exit;
         }
-    }
-
     // handle cache using files
-    elseif (USE_FILECACHE) {
+    } elseif (USE_FILECACHE) {
         $md5 = md5($key);
         $file = CACHE_FOLDER . substr($md5, 0, 1) . '/' . substr($md5, 0, 2) . '/' . substr($md5, 0, 3) . '/' . $file;
+
         // read cache
-        if ($value === null) {
+        if ($value === "") {
+            if ($debug) {
+                print "FileCache read ($key)<br />";
+            }
+
             if (file_exists($file)) {
                 $result = unserialize(file_get_contents($file));
-                if (!$expires || $result['time'] <= $now) {
-                    @unlink($file);
-                }
-                else {
+
+                // If the data is expired
+                if ($result['time'] <= $now) {
+                    $ok    = unlink($file);
+                    $value = null;
+                } else {
                     $value = $result['data'];
                 }
             }
-        }
+        // delete cache
+        } elseif ($value === null) {
+            if ($debug) {
+                print "FileCache delete ($key)<br />";
+            }
+
+            // Remove the file if it's there
+            if (file_exists($file)) {
+                $value = unlink($file);
+            } else {
+                // For consistency with memcache we return false if there is no cache
+                $value = false;
+            }
         // write cache
-        else {
+        } else {
+            if ($debug) {
+                print "FileCache set ($key / $value / $expires)<br />";
+            }
+
             $dir = dirname($file);
+
+            if (!file_exists($dir)) {
+                $ok = mkdir($dir, 0700, true);
+
+                if (!$ok) {
+                    trigger_error("Cannot create directory $dir", E_USER_WARNING);
+                    return false;
+                }
+            }
+
             if (!is_writable($dir)) {
-                trigger_error("Cannot create directory $dir", E_USER_WARNING);
+                trigger_error("Cache directory not writable $dir", E_USER_WARNING);
                 return false;
             }
 
-            if (!file_exists($dir)) {
-                mkdir($dir, 0700, true);
-            }
             file_put_contents($file, serialize(array('data' => $value, 'time' => $expires)));
         }
     } else {
