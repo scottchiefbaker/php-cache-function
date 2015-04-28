@@ -137,7 +137,11 @@ function cache($key, $value = "", $expires = '+1 year')
         // write cache
         } else {
             if ($debug) {
-                print "FileCache set ($key / $value / $expires)<br />";
+                if (is_array($value)) {
+                    print "FileCache set ($key / " . var_export($value,true) . " / $expires)<br />";
+                } else {
+                    print "FileCache set ($key / $value / $expires)<br />";
+                }
             }
 
             $dir = dirname($file);
