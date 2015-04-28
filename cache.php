@@ -100,20 +100,21 @@ function cache($key, $value = "", $expires = '+1 year')
         }
     // handle cache using files
     } elseif (USE_FILECACHE) {
-        $md5 = md5($key);
-        $file = CACHE_FOLDER . substr($md5, 0, 1) . '/' . substr($md5, 0, 2) . '/' . substr($md5, 0, 3) . '/' . $file;
+        $md5  = md5($key);
+        $dir  = CACHE_FOLDER . substr($md5, 0, 2) . '/' . substr($md5, 2, 2);
+        $file = "$dir/$md5";
 
         // read cache
         if ($value === "") {
             if ($debug) {
-                print "FileCache read ($key)<br />";
+                print "FileCache read \"$key\" ($file)<br />";
             }
 
             if (file_exists($file)) {
                 $result = unserialize(file_get_contents($file));
 
                 // If the data is expired
-                if ($result['time'] <= $now) {
+                if ($result['expires'] <= $now) {
                     $ok    = unlink($file);
                     $value = null;
                 } else {
@@ -155,7 +156,12 @@ function cache($key, $value = "", $expires = '+1 year')
                 return false;
             }
 
-            file_put_contents($file, serialize(array('data' => $value, 'time' => $expires)));
+            $array = array(
+                'key'     => $key,
+                'data'    => $value,
+                'expires' => $expires,
+            );
+            file_put_contents($file, serialize($array));
         }
     } else {
         trigger_error("No storage engines left to try", E_USER_ERROR);
