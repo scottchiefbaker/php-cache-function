@@ -113,9 +113,9 @@ function cache($key, $value = "", $expires = '+1 year')
             if (file_exists($file)) {
                 $result = unserialize(file_get_contents($file));
 
-                // If the data is expired
+                // If the data is expired, delete it from the cache
                 if ($result['expires'] <= $now) {
-                    $ok    = unlink($file);
+                    cache($key,null);
                     $value = null;
                 } else {
                     $value = $result['data'];
