@@ -39,7 +39,7 @@ function cache($key, $value = "", $expires = '+1 year')
     // static variables allowing the function to run faster when called multiple times
     static $cache_id, $memcache;
 
-    $debug = 1;
+    $debug = 0;
 
     // get the cache_id used for easy cache clearing
     //if ($key != 'cache_id') {
