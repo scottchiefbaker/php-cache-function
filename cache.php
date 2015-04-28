@@ -165,7 +165,12 @@ function cache($key, $value = "", $expires = '+1 year')
                 'data'    => $value,
                 'expires' => $expires,
             );
-            file_put_contents($file, serialize($array));
+
+            $bytes = file_put_contents($file, serialize($array));
+            if ($bytes === false || $bytes === 0) {
+                trigger_error("Error writing data to the temporary file '$file'", E_USER_WARNING);
+                return false;
+            }
         }
     } else {
         trigger_error("No storage engines left to try", E_USER_ERROR);
