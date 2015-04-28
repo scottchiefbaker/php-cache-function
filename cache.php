@@ -12,7 +12,7 @@
 define('CACHE_NAMESPACE', 'my-cache-namespace');
 
 // if memcache is not available this folder will be used to store cache
-define('CACHE_FOLDER', '/tmp/cache/');
+define('CACHE_FOLDER', sys_get_temp_dir() . '/php-cache/');
 
 // memcache server hostname
 define('CACHE_MEMCACHE_HOST', 'localhost');
